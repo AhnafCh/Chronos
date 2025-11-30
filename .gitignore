@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+Chronos_PRD.md
+
 # C extensions
 *.so
 

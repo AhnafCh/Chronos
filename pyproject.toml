@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "chronos"
+version = "0.1.0"
+description = "Voice RAG Orchestrator"
+authors = ["Asif"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.109.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+websockets = "^12.0"
+python-dotenv = "^1.0.0"
+pydantic-settings = "^2.1.0"
+# Phase 2/3 deps (included now to prevent conflicts later)
+langgraph = "^0.0.10" 
+langchain-openai = "^0.0.5"
+deepgram-sdk = "^3.1.0"
+redis = "^5.0.1"
+numpy = "^1.26.0"
+openai = "^1.12.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
