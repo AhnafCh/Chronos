@@ -13,7 +13,6 @@ from src.brain.retriever import retriever
 
 # Import the routers
 from src.api.websocket import router as ws_router
-from src.api.routes import router as api_router  # <--- Imported here
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +65,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # 6. Include Routes
-# WebSocket (Voice)
+# WebSocket (Voice + Text)
 app.include_router(ws_router, prefix="/ws", tags=["WebSocket"])
-
-# --- NEW: HTTP API (Text Chat) ---
-# You were missing this line:
-app.include_router(api_router, prefix="/api", tags=["Text Chat"])
 
 # 7. Health Check
 @app.get("/", tags=["Health"])
