@@ -69,6 +69,7 @@ class DeepgramASR(ASRInterface):
                 encoding="linear16", 
                 channels=1,
                 sample_rate=16000,
+                endpointing="1000", # milliseconds of silence to consider end of speech
             )
             
             if self.dg_connection.start(options) is False:

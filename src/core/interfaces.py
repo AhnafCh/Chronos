@@ -20,6 +20,10 @@ class LLMInterface(ABC):
     # FIX: Use AsyncGenerator, not asyncio.AsyncGenerator
     async def generate_response(self, query: str) -> AsyncGenerator[str, None]:
         yield "abstract_yield"
+    
+    @abstractmethod
+    def get_usage_stats(self) -> dict:
+        pass
 
 class TTSInterface(ABC):
     @abstractmethod

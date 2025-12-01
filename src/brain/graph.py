@@ -2,56 +2,69 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
 from src.core.config import settings
 from src.brain.state import AgentState
+from src.brain.retriever import retriever
 
 # 1. Initialize LLM
 llm = ChatOpenAI(
     model="gpt-4o-mini", 
-    api_key=settings.OPENAI_API_KEY, #type: ignore
-    streaming=True
+    api_key=settings.OPENAI_API_KEY, # type: ignore
+    streaming=True,
+    # temperature=0.2,
+    # max_tokens=1000 # type: ignore
 )
 
-# System Prompt to define personality
-SYSTEM_PROMPT = SystemMessage(content=(
-    "You are Chronos, a helpful voice assistant. "
-    "Keep answers concise (under 2 sentences) for voice output."
-))
+# 2. Define the Prompt Template
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are Chronos, a helpful voice assistant. "
+               "Answer questions based on the following context:\n\n{context}\n\n"
+               "Keep answers concise (under 2 sentences)."),
+    MessagesPlaceholder(variable_name="messages"),
+])
 
-# 2. Define the Node (The Processor)
+# 3. Node 1: Retrieval (The Librarian)
+async def retrieve_node(state: AgentState):
+    # Get the last user message
+    last_msg_obj = state["messages"][-1]
+    last_message = str(last_msg_obj.content)
+    
+    # Search Pinecone
+    docs = await retriever.ainvoke(last_message)
+    
+    # Combine found text into a single string
+    context_text = "\n\n".join([d.page_content for d in docs])
+    
+    return {"context": context_text}
+
+# 4. Node 2: Generation (The Chatbot)
 async def chatbot_node(state: AgentState):
-    """
-    Receives the state (history), queries the LLM, and returns the new message.
-    """
+    context = state.get("context", "")
     messages = state["messages"]
     
-    # We prepend the system prompt only for the LLM call, 
-    # we don't necessarily need to store it in the history every time 
-    # if we manage it here, but typically we just prepend it to the context.
-    response = await llm.ainvoke([SYSTEM_PROMPT] + messages)
+    # Format the prompt with context + history
+    chain = prompt | llm
+    response = await chain.ainvoke({"context": context, "messages": messages})
     
-    # Return the new message. Because of 'operator.add' in state.py,
-    # this will be appended to the existing list.
     return {"messages": [response]}
 
-# 3. Build the Workflow
+# 5. Build the Workflow
 def build_graph():
-    # Initialize Graph with our State schema
     workflow = StateGraph(AgentState)
 
     # Add Nodes
+    workflow.add_node("retrieve", retrieve_node)
     workflow.add_node("chatbot", chatbot_node)
 
-    # Define Edges (Simple loop: Start -> Chatbot -> End)
-    workflow.add_edge(START, "chatbot")
+    # Define Flow: Start -> Retrieve -> Chatbot -> End
+    workflow.add_edge(START, "retrieve")
+    workflow.add_edge("retrieve", "chatbot")
     workflow.add_edge("chatbot", END)
 
-    # Add Persistence (Memory)
-    # MemorySaver keeps the state in RAM. Later we will swap this for Redis.
     memory = MemorySaver()
 
-    # Compile into a Runnable
     return workflow.compile(checkpointer=memory)
 
-# Singleton instance for the app to import
 brain_app = build_graph()

@@ -11,6 +11,11 @@ class OpenAILLM(LLMInterface):
     def __init__(self):
         self.thread_id = str(uuid.uuid4())
         self.config = {"configurable": {"thread_id": self.thread_id}}
+
+        # --- Token Counters ---
+        self.input_tokens = 0
+        self.output_tokens = 0
+
         logger.info(f"Brain initialized for session: {self.thread_id}")
 
     async def generate_response(self, query: str) -> AsyncGenerator[str, None]:
@@ -37,7 +42,26 @@ class OpenAILLM(LLMInterface):
                     # Yield content if it exists
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         yield chunk.content
+                
+                # Capture Usage (End of Turn)
+                elif kind == "on_chat_model_end":
+                    # Check if usage metadata exists in this event
+                    data = event["data"].get("output")
+                    if data and hasattr(data, "usage_metadata") and data.usage_metadata:
+                        usage = data.usage_metadata
+                        # Accumulate totals
+                        self.input_tokens += usage.get("input_tokens", 0)
+                        self.output_tokens += usage.get("output_tokens", 0)
 
         except Exception as e:
             logger.error(f"LLM/Graph Error: {e}")
             yield "I'm sorry, I'm having trouble thinking right now."
+
+
+# --- Return the Counters ---
+    def get_usage_stats(self) -> dict:
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.input_tokens + self.output_tokens
+        }

@@ -20,24 +20,35 @@ class ConnectionManager:
         logger.info("Client connected")
 
         # 1. Start ASR Background Connection
-        # This sets up the Deepgram websocket and tells it to write to our queue
         await self.asr.start(self.transcription_queue)
 
         # 2. Start Independent Tasks
-        # Task A: Listen to Client Audio (The Ear)
         receive_task = asyncio.create_task(self.receive_audio())
-        # Task B: Process Transcripts (The Brain & Mouth)
         process_task = asyncio.create_task(self.run_brain())
 
         try:
             # 3. Keep connection alive
-            # If either task fails/finishes, we exit
             await asyncio.gather(receive_task, process_task)
         except WebSocketDisconnect:
             logger.info("Client disconnected gracefully")
         except Exception as e:
             logger.error(f"Connection error: {e}")
         finally:
+            # --- START: TOKEN USAGE LOGGING ---
+            try:
+                # We ask the LLM service for the accumulated stats
+                stats = self.llm.get_usage_stats()
+                # We safely get the thread_id if available
+                session_id = getattr(self.llm, 'thread_id', 'unknown')
+                
+                logger.info("--- CALL SUMMARY ---")
+                logger.info(f"Session ID: {session_id}")
+                logger.info(f"Token Usage: {stats}")
+                logger.info("--------------------")
+            except Exception as e:
+                logger.warning(f"Could not log token stats: {e}")
+            # --- END: TOKEN USAGE LOGGING ---
+
             # Cleanup on exit
             await self.asr.stop()
             logger.info("Connection resources cleaned up")
@@ -75,9 +86,15 @@ class ConnectionManager:
                 continue
 
             logger.info(f"User said: {transcript}")
+            
+            # Send User Text to Frontend
+            await self.websocket.send_json({
+                "type": "conversation_item",
+                "role": "user",
+                "content": transcript
+            })
 
             # 2. Generate Tokens (LLM)
-            # We use the Interface method: generate_response
             token_generator = self.llm.generate_response(transcript)
             
             # 3. Buffer Tokens into Sentences (Better TTS quality)
@@ -86,19 +103,32 @@ class ConnectionManager:
             # 4. Synthesize & Stream (TTS)
             async for sentence in sentence_generator:
                 logger.info(f"Speaking: {sentence}")
+
+                # Send Bot Text to Frontend
+                await self.websocket.send_json({
+                    "type": "conversation_item",
+                    "role": "assistant",
+                    "content": sentence
+                })
                 
-                # Stream audio chunks from TTS
+                # --- FIX FOR SMOOTH AUDIO ---
+                # Instead of sending tiny chunks, we collect the whole sentence 
+                # audio and send it as one playable blob.
+                full_sentence_audio = bytearray()
+                
                 async for audio_chunk in self.tts.speak(sentence):
-                    # 5. Send back to User immediately
-                    await self.websocket.send_bytes(audio_chunk)
+                    full_sentence_audio.extend(audio_chunk)
+                
+                # Send the complete sentence audio at once
+                if len(full_sentence_audio) > 0:
+                    await self.websocket.send_bytes(full_sentence_audio)
+                # ----------------------------
 
     async def text_chunker(self, chunks: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
         """
         Aggregates tokens into full sentences to optimize TTS audio quality.
-        Does not wait for the whole response; yields as soon as a sentence is ready.
         """
         buffer = ""
-        # Punctuation that marks the end of a sentence
         punctuation = {".", "?", "!", ":", ";"}
         
         async for text in chunks:
@@ -112,15 +142,12 @@ class ConnectionManager:
                     last_punc_index = idx
             
             if last_punc_index != -1:
-                # We found a complete sentence
                 sentence = buffer[:last_punc_index+1]
                 buffer = buffer[last_punc_index+1:]
                 
-                # Clean up and yield
                 sentence = sentence.strip()
                 if sentence:
                     yield sentence
 
-        # Yield remaining buffer if any (the last sentence might miss punctuation)
         if buffer.strip():
             yield buffer.strip()
