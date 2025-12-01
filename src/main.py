@@ -13,6 +13,7 @@ from src.brain.retriever import retriever
 
 # Import the routers
 from src.api.websocket import router as ws_router
+from src.api.upload import router as upload_router
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 # 6. Include Routes
 # WebSocket (Voice + Text)
 app.include_router(ws_router, prefix="/ws", tags=["WebSocket"])
+# File Upload & Ingestion
+app.include_router(upload_router, prefix="/api", tags=["Upload"])
 
 # 7. Health Check
 @app.get("/", tags=["Health"])
@@ -79,5 +82,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8026, 
         reload=True,
+        reload_excludes=["**/__pycache__/**", "**/*.pyc", "**/tests/**", "**/*.md"],
         log_level="info"
     )

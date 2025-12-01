@@ -21,6 +21,7 @@ llm = ChatOpenAI(
 prompt = ChatPromptTemplate.from_messages([
     ("system", "You are Chronos, a helpful voice assistant. "
                "Answer questions based on the following context:\n\n{context}\n\n"
+               "If user says him/her name, greet them by name and tell them their name's meaning. "
                "Keep answers concise (under 2 sentences)."),
     MessagesPlaceholder(variable_name="messages"),
 ])

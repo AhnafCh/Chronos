@@ -12,7 +12,7 @@ class ConnectionManager:
         self.asr = asr
         self.llm = llm
         self.tts = tts
-        # Queue for passing text from ASR -> LLM
+        # Queue for passing text from ASR -> LLM with input type info
         self.transcription_queue = asyncio.Queue()
 
     async def connect(self):
@@ -70,8 +70,11 @@ class ConnectionManager:
                     try:
                         data = json.loads(message["text"])
                         if data.get("type") == "text":
-                            # Bypass ASR, send text directly to brain
-                            await self.transcription_queue.put(data.get("content", ""))
+                            # Bypass ASR, send text directly to brain with input_type marker
+                            await self.transcription_queue.put({
+                                "text": data.get("content", ""),
+                                "input_type": "text"
+                            })
                     except json.JSONDecodeError:
                         logger.warning("Received invalid JSON text message")
                 
@@ -97,12 +100,21 @@ class ConnectionManager:
         """
         while True:
             # 1. Wait for a final transcript from ASR
-            transcript = await self.transcription_queue.get()
+            queue_item = await self.transcription_queue.get()
+            
+            # Handle both old string format and new dict format
+            if isinstance(queue_item, dict):
+                transcript = queue_item.get("text", "")
+                input_type = queue_item.get("input_type", "voice")
+            else:
+                # Legacy: if it's just a string, assume it's from voice
+                transcript = queue_item
+                input_type = "voice"
             
             if not transcript:
                 continue
 
-            logger.info(f"User said: {transcript}")
+            logger.info(f"User said: {transcript} (input_type: {input_type})")
             
             # Send User Text to Frontend
             await self.websocket.send_json({
@@ -117,29 +129,24 @@ class ConnectionManager:
             # 3. Buffer Tokens into Sentences (Better TTS quality)
             sentence_generator = self.text_chunker(token_generator)
             
-            # 4. Synthesize & Stream (TTS)
+            # 4. Synthesize & Stream (TTS) - Only if input was voice
             async for sentence in sentence_generator:
                 logger.info(f"Speaking: {sentence}")
 
-                # Send Bot Text to Frontend
+                # Send Bot Text to Frontend immediately
                 await self.websocket.send_json({
                     "type": "conversation_item",
                     "role": "assistant",
                     "content": sentence
                 })
                 
-                # --- FIX FOR SMOOTH AUDIO ---
-                # Instead of sending tiny chunks, we collect the whole sentence 
-                # audio and send it as one playable blob.
-                full_sentence_audio = bytearray()
-                
-                async for audio_chunk in self.tts.speak(sentence):
-                    full_sentence_audio.extend(audio_chunk)
-                
-                # Send the complete sentence audio at once
-                if len(full_sentence_audio) > 0:
-                    await self.websocket.send_bytes(full_sentence_audio)
-                # ----------------------------
+                # Only generate and send audio if the input was voice
+                if input_type == "voice":
+                    # PARALLEL PROCESSING: Start TTS immediately and stream as chunks arrive
+                    # This reduces perceived latency - audio starts playing sooner
+                    async for audio_chunk in self.tts.speak(sentence):
+                        if audio_chunk:
+                            await self.websocket.send_bytes(audio_chunk)
 
     async def text_chunker(self, chunks: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
         """

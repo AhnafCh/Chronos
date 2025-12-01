@@ -1,15 +1,60 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import uuid
+import requests
 
 st.set_page_config(page_title="Chronos AI", layout="centered")
 
 # --- CONFIG ---
 # Ensure port matches main.py (8026)
 WS_URL = "ws://localhost:8026/ws/chat"
+API_URL = "http://localhost:8026"
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
+
+# --- SIDEBAR: File Upload ---
+with st.sidebar:
+    st.header("📤 Upload Documents")
+    st.markdown("Upload files to enhance the AI's knowledge base")
+    
+    uploaded_files = st.file_uploader(
+        "Choose files",
+        type=["pdf", "txt", "md", "docx"],
+        accept_multiple_files=True,
+        help="Supported formats: PDF, TXT, MD, DOCX"
+    )
+    
+    if st.button("🚀 Ingest Files", type="primary", disabled=not uploaded_files):
+        if uploaded_files:
+            with st.spinner("Processing and ingesting files..."):
+                try:
+                    # Prepare files for upload
+                    files = [("files", (file.name, file.getvalue(), file.type)) for file in uploaded_files]
+                    
+                    # Upload to API
+                    response = requests.post(f"{API_URL}/api/upload/batch", files=files)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.success(f"✅ Successfully ingested {result['total_documents_ingested']} documents!")
+                        
+                        # Show details
+                        with st.expander("📋 Details"):
+                            for file_result in result['files']:
+                                status_icon = "✅" if file_result['status'] == 'processed' else "❌"
+                                st.write(f"{status_icon} **{file_result['filename']}**: {file_result.get('documents_extracted', 'N/A')} docs")
+                    else:
+                        error_detail = response.json().get('detail', 'Unknown error')
+                        st.error(f"❌ Upload failed: {error_detail}")
+                        
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Cannot connect to server. Is it running on port 8026?")
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+    
+    st.divider()
+    st.caption("💡 Files are automatically processed and stored in the vector database")
 
 st.title("🤖 Chronos Unified Agent")
 

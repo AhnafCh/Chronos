@@ -17,14 +17,18 @@ class OpenAITTS(TTSInterface):
 
         try:
             # Using 'with_streaming_response' to get a true async stream
+            # tts-1 is optimized for speed (lower latency than tts-1-hd)
+            # alloy voice is fast and natural
+            # pcm16 has lower overhead than mp3 for streaming
             async with self.client.audio.speech.with_streaming_response.create(
-                model="tts-1",
-                voice="onyx",
+                model="tts-1",  # Fastest model
+                voice="alloy",  # Fast, natural voice
                 input=text,
-                response_format="mp3"
+                response_format="pcm",  # Lower latency than mp3
+                speed=1.1  # Slightly faster speech for reduced latency
             ) as response:
-                # response.iter_bytes() is an async iterator here
-                async for chunk in response.iter_bytes(chunk_size=4096):
+                # Smaller chunks for lower latency
+                async for chunk in response.iter_bytes(chunk_size=2048):
                     if chunk:
                         yield chunk
 

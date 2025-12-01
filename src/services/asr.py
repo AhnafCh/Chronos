@@ -47,8 +47,12 @@ class DeepgramASR(ASRInterface):
                         logger.info(f"ASR Transcript: {sentence}")
                         
                         # FIX: Use self.loop (Main Loop) instead of get_running_loop()
+                        # Send transcript with input_type marker for voice
                         asyncio.run_coroutine_threadsafe(
-                            self.queue.put(sentence), 
+                            self.queue.put({
+                                "text": sentence,
+                                "input_type": "voice"
+                            }), 
                             self.loop
                         )
             except Exception as e:
@@ -85,6 +89,7 @@ class DeepgramASR(ASRInterface):
         if self.dg_connection:
             self.dg_connection.send(audio_chunk)
 
+   
     async def stop(self):
         if self.dg_connection:
             self.dg_connection.finish()
