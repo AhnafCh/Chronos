@@ -8,8 +8,8 @@ from src.brain.graph import brain_app
 logger = logging.getLogger(__name__)
 
 class OpenAILLM(LLMInterface):
-    def __init__(self):
-        self.thread_id = str(uuid.uuid4())
+    def __init__(self, thread_id: str):
+        self.thread_id = thread_id
         self.config = {"configurable": {"thread_id": self.thread_id}}
 
         # --- Token Counters ---

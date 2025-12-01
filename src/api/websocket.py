@@ -1,5 +1,5 @@
 # src/api/websocket.py
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from src.transport.connection_mgr import ConnectionManager
 
 # Services are imported HERE, not in main.py
@@ -10,10 +10,13 @@ from src.services.tts import OpenAITTS
 router = APIRouter()
 
 @router.websocket("/chat")  # This becomes /ws/chat because of the prefix in main.py
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    session_id: str = Query(..., description="Client generated ID")
+):
     # Dependency Injection: Create fresh services for this specific user connection
     asr_service = DeepgramASR()
-    llm_service = OpenAILLM()
+    llm_service = OpenAILLM(thread_id=session_id)
     tts_service = OpenAITTS()
 
     manager = ConnectionManager(

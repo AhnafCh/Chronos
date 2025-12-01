@@ -1,221 +1,277 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import uuid
 
-st.set_page_config(page_title="Chronos Voice Agent", layout="wide")
+st.set_page_config(page_title="Chronos AI", layout="centered")
 
-st.title("🎙️ Chronos Voice RAG Agent")
-st.markdown("This client connects directly to your local **FastAPI WebSocket** (`ws://localhost:8026/ws/chat`).")
+# --- CONFIG ---
+# Ensure port matches main.py (8026)
+WS_URL = "ws://localhost:8026/ws/chat"
 
-# --- CSS STYLING ---
-st.markdown("""
-<style>
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-    }
-</style>
-""", unsafe_allow_html=True)
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
 
-# --- JAVASCRIPT CLIENT ---
-html_code = """
+st.title("🤖 Chronos Unified Agent")
+
+# We pass the Session ID and URL to the JavaScript
+js_code = f"""
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chronos Client</title>
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; }
-        .container { padding: 20px; border: 1px solid #ddd; border-radius: 10px; text-align: center; }
-        .controls { margin-bottom: 20px; }
-        .btn { padding: 15px 32px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; color: white; margin: 5px; }
-        .btn-start { background-color: #4CAF50; }
-        .btn-stop { background-color: #f44336; }
-        .btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        body {{ font-family: "Source Sans Pro", sans-serif; margin: 0; padding: 0; }}
         
-        /* Chat Box Styling */
-        #chat-box {
-            height: 300px;
-            overflow-y: auto;
-            border: 1px solid #eee;
-            border-radius: 5px;
-            padding: 10px;
-            background-color: #000000;
-            text-align: left;
-            margin-top: 15px;
+        /* Chat Container */
+        #chat-container {{
             display: flex;
             flex-direction: column;
-        }
-        .message {
-            margin: 5px 0;
-            padding: 8px 12px;
-            border-radius: 15px;
+            height: 500px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            background: #fff;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }}
+
+        /* History Area */
+        #history {{
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fafafa;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }}
+
+        /* Message Bubbles */
+        .bubble {{
             max-width: 80%;
-            word-wrap: break-word;
-        }
-        .user {
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 15px;
+            line-height: 1.4;
+            position: relative;
+        }}
+        .user {{
             align-self: flex-end;
-            background-color: #DCF8C6;
-            color: #000;
-        }
-        .bot {
+            background-color: #007bff;
+            color: white;
+            border-bottom-right-radius: 2px;
+        }}
+        .assistant {{
             align-self: flex-start;
-            background-color: #E8E8E8;
-            color: #000;
-        }
-        .status { font-weight: bold; color: gray; }
+            background-color: #e9ecef;
+            color: #333;
+            border-bottom-left-radius: 2px;
+        }}
+
+        /* Input Area */
+        #input-area {{
+            padding: 15px;
+            background: #fff;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }}
+
+        input[type="text"] {{
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            outline: none;
+            font-size: 15px;
+        }}
+        input[type="text"]:focus {{ border-color: #007bff; }}
+
+        /* Buttons */
+        .btn-icon {{
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.2s;
+        }}
+        
+        #micBtn {{ background: #f8f9fa; color: #333; border: 1px solid #ddd; }}
+        #micBtn.active {{ background: #ff4b4b; color: white; border-color: #ff4b4b; animation: pulse 1.5s infinite; }}
+        
+        #sendBtn {{ background: #007bff; color: white; }}
+        #sendBtn:hover {{ background: #0056b3; }}
+
+        @keyframes pulse {{
+            0% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.4); }}
+            70% {{ box-shadow: 0 0 0 10px rgba(255, 75, 75, 0); }}
+            100% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }}
+        }}
+
+        #status {{ font-size: 11px; color: #999; text-align: center; padding: 5px; }}
     </style>
 </head>
 <body>
-    <div class="container">
-        <h3>Status: <span id="status" class="status">Disconnected</span></h3>
-        
-        <div class="controls">
-            <button id="startBtn" class="btn btn-start">📞 Start Call</button>
-            <button id="stopBtn" class="btn btn-stop" disabled>🛑 End Call</button>
-        </div>
 
-        <!-- Chat Transcript Area -->
-        <div id="chat-box">
-            <div style="text-align: center; color: #888; font-size: 0.9em;">
-                <i>Transcript will appear here...</i>
-            </div>
+    <div id="chat-container">
+        <div id="status">Connecting...</div>
+        <div id="history">
+            <div style="text-align:center; color:#ccc; margin-top:20px;">start conversation...</div>
+        </div>
+        
+        <div id="input-area">
+            <button id="micBtn" class="btn-icon">🎙️</button>
+            <input type="text" id="textInput" placeholder="Type a message..." disabled />
+            <button id="sendBtn" class="btn-icon">➤</button>
         </div>
     </div>
 
     <script>
-        let socket;
-        let audioContext;
-        let processor;
-        let input;
-        let globalStream;
+        const SESSION_ID = "{st.session_state.session_id}";
+        const WS_URL = "{WS_URL}?session_id=" + SESSION_ID;
         
+        // DOM Elements
+        const historyDiv = document.getElementById('history');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const micBtn = document.getElementById('micBtn');
+        const statusDiv = document.getElementById('status');
+
+        // State
+        let socket;
+        let audioContext, processor, input, globalStream;
+        let isMicActive = false;
         let audioQueue = [];
         let isPlaying = false;
 
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const statusSpan = document.getElementById('status');
-        const chatBox = document.getElementById('chat-box');
-
-        function appendMessage(role, text) {
-            const div = document.createElement('div');
-            div.className = `message ${role === 'user' ? 'user' : 'bot'}`;
-            div.innerText = text;
-            chatBox.appendChild(div);
-            // Auto-scroll to bottom
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-
-        async function playQueue() {
-            if (isPlaying || audioQueue.length === 0) return;
-            isPlaying = true;
-
-            const audioBlob = audioQueue.shift();
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-
-            audio.onended = () => {
-                isPlaying = false;
-                playQueue();
-            };
+        // --- 1. WebSocket Logic ---
+        function connect() {{
+            socket = new WebSocket(WS_URL);
             
-            try {
-                await audio.play();
-            } catch (e) {
-                console.error("Playback error:", e);
-                isPlaying = false;
-            }
-        }
+            socket.onopen = () => {{
+                statusDiv.innerText = "Connected";
+                textInput.disabled = false;
+                textInput.focus();
+            }};
 
-        startBtn.onclick = async () => {
-            // Connect to WebSocket
-            socket = new WebSocket("ws://localhost:8026/ws/chat");
-            
-            // IMPORTANT: We do NOT set binaryType to 'arraybuffer' immediately here
-            // because we need to detect strings vs binary automatically.
-            // Most browsers handle mixed types fine by default.
-
-            socket.onopen = () => {
-                statusSpan.innerText = "Connected";
-                statusSpan.style.color = "green";
-                startBtn.disabled = true;
-                stopBtn.disabled = false;
-                chatBox.innerHTML = ""; // Clear previous chat
-                startAudio();
-            };
-
-            socket.onmessage = (event) => {
+            socket.onmessage = (event) => {{
                 const data = event.data;
-
-                // 1. Handle TEXT (JSON Transcript)
-                if (typeof data === "string") {
-                    try {
-                        const msg = JSON.parse(data);
-                        if (msg.type === "conversation_item") {
-                            appendMessage(msg.role, msg.content);
-                        }
-                    } catch (e) {
-                        console.error("Error parsing JSON:", e);
-                    }
-                } 
-                // 2. Handle BINARY (Audio Blob)
-                else if (data instanceof Blob) {
+                
+                // Handle Audio
+                if (data instanceof Blob) {{
                     audioQueue.push(data);
                     playQueue();
-                }
-            };
+                }} 
+                // Handle JSON (Text Chat)
+                else if (typeof data === "string") {{
+                    try {{
+                        const msg = JSON.parse(data);
+                        if (msg.type === "conversation_item") {{
+                            addBubble(msg.role, msg.content);
+                        }}
+                    }} catch (e) {{ console.error(e); }}
+                }}
+            }};
 
-            socket.onclose = () => {
-                statusSpan.innerText = "Disconnected";
-                statusSpan.style.color = "gray";
-                stopAudio();
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-            };
-        };
+            socket.onclose = () => {{
+                statusDiv.innerText = "Disconnected. Refresh to reconnect.";
+                textInput.disabled = true;
+                stopMic();
+            }};
+        }}
 
-        stopBtn.onclick = () => {
-            if (socket) socket.close();
-            stopAudio();
-        };
+        // --- 2. Chat UI Logic ---
+        function addBubble(role, text) {{
+            // Remove placeholder
+            if (historyDiv.innerText.includes("start conversation")) historyDiv.innerHTML = "";
+            
+            const div = document.createElement('div');
+            div.className = `bubble ${{role}}`;
+            div.innerText = text;
+            historyDiv.appendChild(div);
+            historyDiv.scrollTop = historyDiv.scrollHeight;
+        }}
 
-        async function startAudio() {
-            try {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        function sendText() {{
+            const text = textInput.value.trim();
+            if (!text || socket.readyState !== WebSocket.OPEN) return;
+            
+            // Send JSON frame
+            socket.send(JSON.stringify({{ type: "text", content: text }}));
+            textInput.value = "";
+        }}
+
+        // Event Listeners for Text
+        sendBtn.onclick = sendText;
+        textInput.onkeypress = (e) => {{ if (e.key === 'Enter') sendText(); }};
+
+        // --- 3. Audio Logic ---
+        micBtn.onclick = () => {{
+            if (!isMicActive) startMic();
+            else stopMic();
+        }};
+
+        async function startMic() {{
+            try {{
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({{ sampleRate: 16000 }});
+                const stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
                 globalStream = stream;
                 input = audioContext.createMediaStreamSource(stream);
                 processor = audioContext.createScriptProcessor(4096, 1, 1);
-
                 input.connect(processor);
                 processor.connect(audioContext.destination);
 
-                processor.onaudioprocess = (e) => {
-                    if (socket && socket.readyState === WebSocket.OPEN) {
+                processor.onaudioprocess = (e) => {{
+                    if (socket && socket.readyState === WebSocket.OPEN) {{
                         const inputData = e.inputBuffer.getChannelData(0);
                         const buffer = new ArrayBuffer(inputData.length * 2);
                         const view = new DataView(buffer);
-                        for (let i = 0; i < inputData.length; i++) {
+                        for (let i = 0; i < inputData.length; i++) {{
                             let s = Math.max(-1, Math.min(1, inputData[i]));
                             view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-                        }
+                        }}
                         socket.send(buffer);
-                    }
-                };
-            } catch (e) {
-                alert("Microphone Error: " + e.message);
-            }
-        }
+                    }}
+                }};
+                
+                isMicActive = true;
+                micBtn.classList.add("active");
+                statusDiv.innerText = "Listening...";
+                
+            }} catch (e) {{ alert("Mic Error: " + e.message); }}
+        }}
 
-        function stopAudio() {
-            if (processor) { processor.disconnect(); processor = null; }
-            if (input) { input.disconnect(); input = null; }
-            if (globalStream) { globalStream.getTracks().forEach(track => track.stop()); globalStream = null; }
-            if (audioContext) { audioContext.close(); audioContext = null; }
-        }
+        function stopMic() {{
+            if (processor) processor.disconnect();
+            if (input) input.disconnect();
+            if (globalStream) globalStream.getTracks().forEach(t => t.stop());
+            if (audioContext) audioContext.close();
+            
+            isMicActive = false;
+            micBtn.classList.remove("active");
+            statusDiv.innerText = "Connected";
+        }}
+
+        async function playQueue() {{
+            if (isPlaying || audioQueue.length === 0) return;
+            isPlaying = true;
+            const audioBlob = audioQueue.shift();
+            const audio = new Audio(URL.createObjectURL(audioBlob));
+            audio.onended = () => {{ isPlaying = false; playQueue(); }};
+            await audio.play();
+        }}
+
+        // Init
+        connect();
+
     </script>
 </body>
 </html>
 """
 
-components.html(html_code, height=600)
+# Render the Unified Interface
+components.html(js_code, height=600)

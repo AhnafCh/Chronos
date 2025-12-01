@@ -55,18 +55,35 @@ class ConnectionManager:
 
     async def receive_audio(self):
         """
-        Input Actor: Listens to WebSocket and pushes raw bytes to ASR.
+        Input Actor: Listens to WebSocket and handles:
+        - Raw audio bytes → ASR
+        - Text JSON messages → Directly to transcription queue
         """
         try:
             while True:
-                # Expecting raw PCM bytes from client
-                data = await self.websocket.receive_bytes()
-                # Send immediately to Deepgram (Fire and Forget)
-                await self.asr.process(data)
+                # Check message type
+                message = await self.websocket.receive()
+                
+                # Handle text messages (chat input)
+                if "text" in message:
+                    import json
+                    try:
+                        data = json.loads(message["text"])
+                        if data.get("type") == "text":
+                            # Bypass ASR, send text directly to brain
+                            await self.transcription_queue.put(data.get("content", ""))
+                    except json.JSONDecodeError:
+                        logger.warning("Received invalid JSON text message")
+                
+                # Handle binary messages (audio input)
+                elif "bytes" in message:
+                    # Send immediately to Deepgram (Fire and Forget)
+                    await self.asr.process(message["bytes"])
+                    
         except WebSocketDisconnect:
             raise # Let the main loop handle the disconnect
         except Exception as e:
-            logger.error(f"Error receiving audio: {e}")
+            logger.error(f"Error receiving data: {e}")
             raise
 
     async def run_brain(self):
