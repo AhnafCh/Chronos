@@ -3,6 +3,8 @@ __pycache__/
 *$py.class
 
 Chronos_PRD.md
+AUTHENTICATION_SETUP.md
+authplan.md
 
 # C extensions
 *.so
@@ -42,6 +44,7 @@ pip-delete-this-directory.txt
 
 # Environment variables
 .env
+poetry.lock
 
 # OS files
 .DS_Store

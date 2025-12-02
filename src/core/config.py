@@ -4,7 +4,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     # App Config
     APP_NAME: str = "Chronos"
-    DEBUG: bool = True
+    DEBUG: bool = False
     
     # AI Providers
     OPENAI_API_KEY: str | None = None
@@ -17,6 +17,14 @@ class Settings(BaseSettings):
 
     # Caching
     # REDIS_URL: str = "redis://localhost:6379"
+
+    # Database
+    DATABASE_URL: str
+    
+    # Authentication
+    JWT_SECRET: str
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Audio Settings
     INPUT_SAMPLE_RATE: int = 16000  # Standard for Speech to Text

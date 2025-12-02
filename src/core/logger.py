@@ -17,8 +17,12 @@ def setup_logger():
     logging.getLogger("websockets").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)  # <--- Add this
-    logging.getLogger("watchfiles").setLevel(logging.WARNING) # <--- Add this
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    logging.getLogger("aiohttp_retry").setLevel(logging.WARNING)
+    logging.getLogger("tensorflow").setLevel(logging.ERROR)
     # -------------------------------
 
     logger = logging.getLogger("chronos")

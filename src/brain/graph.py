@@ -5,24 +5,26 @@ from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from src.core.config import settings
+from src.core import control
 from src.brain.state import AgentState
 from src.brain.retriever import retriever
 
-# 1. Initialize LLM
+# 1. Initialize LLM with control.py settings
 llm = ChatOpenAI(
-    model="gpt-4o-mini", 
+    model=control.LLM_MODEL, 
     api_key=settings.OPENAI_API_KEY, # type: ignore
     streaming=True,
-    # temperature=0.2,
-    # max_tokens=1000 # type: ignore
+    temperature=control.LLM_TEMPERATURE,
+    max_tokens=control.LLM_MAX_TOKENS # type: ignore
 )
 
-# 2. Define the Prompt Template
+# 2. Define the Prompt Template (using control settings for response length)
+# Note: System prompt can be extended via control.py if needed
 prompt = ChatPromptTemplate.from_messages([
     ("system", "You are Chronos, a helpful voice assistant. "
                "Answer questions based on the following context:\n\n{context}\n\n"
                "If user says him/her name, greet them by name and tell them their name's meaning. "
-               "Keep answers concise (under 2 sentences)."),
+               f"Keep answers concise (under 2 sentences)."),
     MessagesPlaceholder(variable_name="messages"),
 ])
 

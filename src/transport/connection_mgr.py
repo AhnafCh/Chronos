@@ -1,24 +1,48 @@
 import asyncio
 import logging
 import re
+from datetime import datetime, timezone
 from typing import AsyncGenerator
-from fastapi import WebSocket, WebSocketDisconnect
+from uuid import UUID
+from fastapi import WebSocket, WebSocketDisconnect, BackgroundTasks
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.interfaces import ASRInterface, LLMInterface, TTSInterface
+from src.db.crud import create_session_log, update_session_log
+from src.core import control
 
 logger = logging.getLogger(__name__)
+logger.setLevel(control.VOICE_PIPELINE_LOG_LEVEL)
 
 class ConnectionManager:
-    def __init__(self, websocket: WebSocket, asr: ASRInterface, llm: LLMInterface, tts: TTSInterface):
+    def __init__(
+        self, 
+        websocket: WebSocket, 
+        asr: ASRInterface, 
+        llm: LLMInterface, 
+        tts: TTSInterface,
+        user_id: UUID | None = None,
+        session_id: str | None = None
+    ):
         self.websocket = websocket
         self.asr = asr
         self.llm = llm
         self.tts = tts
+        self.user_id = user_id
+        self.session_id = session_id
         # Queue for passing text from ASR -> LLM with input type info
         self.transcription_queue = asyncio.Queue()
 
-    async def connect(self):
+    async def connect(self, db: AsyncSession):
         await self.websocket.accept()
         logger.info("Client connected")
+
+        # Create session log record
+        if self.session_id:
+            try:
+                await create_session_log(db, self.session_id, self.user_id)
+                logger.info(f"Session log created for {self.session_id}")
+            except Exception as e:
+                logger.error(f"Failed to create session log: {e}")
 
         # 1. Start ASR Background Connection
         await self.asr.start(self.transcription_queue)
@@ -39,13 +63,21 @@ class ConnectionManager:
             try:
                 # We ask the LLM service for the accumulated stats
                 stats = self.llm.get_usage_stats()
-                # We safely get the thread_id if available
-                session_id = getattr(self.llm, 'thread_id', 'unknown')
                 
                 logger.info("--- CALL SUMMARY ---")
-                logger.info(f"Session ID: {session_id}")
+                logger.info(f"Session ID: {self.session_id}")
                 logger.info(f"Token Usage: {stats}")
                 logger.info("--------------------")
+                
+                # Update session log with end time and token usage
+                if self.session_id:
+                    await update_session_log(
+                        db, 
+                        self.session_id, 
+                        datetime.now(timezone.utc), 
+                        stats
+                    )
+                    logger.info(f"Session log updated for {self.session_id}")
             except Exception as e:
                 logger.warning(f"Could not log token stats: {e}")
             # --- END: TOKEN USAGE LOGGING ---

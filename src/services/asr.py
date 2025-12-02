@@ -9,8 +9,10 @@ from deepgram import LiveTranscriptionEvents
 
 from src.core.interfaces import ASRInterface
 from src.core.config import settings
+from src.core import control
 
 logger = logging.getLogger(__name__)
+logger.setLevel(control.VOICE_PIPELINE_LOG_LEVEL)
 
 class DeepgramASR(ASRInterface):
     def __init__(self):
@@ -72,13 +74,13 @@ class DeepgramASR(ASRInterface):
 
         try:
             options = LiveOptions(
-                model="nova-2",
-                language="en-US",
-                smart_format=True,
-                encoding="linear16", 
-                channels=1,
-                sample_rate=16000,
-                endpointing="1000", # milliseconds of silence to consider end of speech
+                model=control.ASR_MODEL,
+                language=control.ASR_LANGUAGE,
+                smart_format=control.ASR_SMART_FORMAT,
+                encoding=control.ASR_ENCODING, 
+                channels=control.ASR_CHANNELS,
+                sample_rate=control.ASR_SAMPLE_RATE,
+                endpointing=str(control.ASR_ENDPOINTING_MS), # milliseconds of silence to consider end of speech
             )
             
             if self.dg_connection.start(options) is False:

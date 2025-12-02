@@ -1,13 +1,17 @@
 # src/main.py
 import os
 import warnings
+
 # Suppress TensorFlow warnings before any TF imports
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress all TF logs except errors
 os.environ['TF_ENABLE_DEPRECATION_WARNINGS'] = '0'
+
 # Suppress Python warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', module='tensorflow')
+warnings.filterwarnings('ignore', module='tf_keras')
 
 import logging
 from contextlib import asynccontextmanager
@@ -17,13 +21,18 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from src.core.config import settings
 from src.core.logger import setup_logger
+from src.core import control
 
 # For dummy import to initialize the retriever at startup
 from src.brain.retriever import retriever
 
+# Database initialization
+from src.db.database import init_db
+
 # Import the routers
 from src.api.websocket import router as ws_router
 from src.api.upload import router as upload_router
+from src.api.auth import router as auth_router
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +44,14 @@ setup_logger()
 async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"🚀 {settings.APP_NAME} starting up...")
+    
+    # Initialize Database
+    try:
+        logger.info("🗄️ Initializing database tables...")
+        await init_db()
+        logger.info("✅ Database is ready!")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
     
     # Warmup Vector DB
     if settings.PINECONE_API_KEY:
@@ -76,6 +93,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # 6. Include Routes
+# Authentication
+app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 # WebSocket (Voice + Text)
 app.include_router(ws_router, prefix="/ws", tags=["WebSocket"])
 # File Upload & Ingestion
@@ -89,8 +108,8 @@ async def root():
 if __name__ == "__main__":
     uvicorn.run(
         "src.main:app",
-        host="0.0.0.0",
-        port=8026, 
+        host=control.SERVER_HOST,
+        port=control.SERVER_PORT, 
         reload=True,
         reload_excludes=["**/__pycache__/**", "**/*.pyc", "**/tests/**", "**/*.md"],
         log_level="info"

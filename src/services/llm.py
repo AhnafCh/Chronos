@@ -4,8 +4,10 @@ from typing import AsyncGenerator
 from langchain_core.messages import HumanMessage
 from src.core.interfaces import LLMInterface
 from src.brain.graph import brain_app
+from src.core import control
 
 logger = logging.getLogger(__name__)
+logger.setLevel(control.VOICE_PIPELINE_LOG_LEVEL)
 
 class OpenAILLM(LLMInterface):
     def __init__(self, thread_id: str):

@@ -2,14 +2,33 @@ import streamlit as st
 import streamlit.components.v1 as components
 import uuid
 import requests
+import sys
+from pathlib import Path
+
+# Add parent directory to path to import from src
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.core import control
+from auth_utils import init_auth_state, is_authenticated, get_auth_headers
+from auth_components import render_auth_page, render_user_menu
 
 st.set_page_config(page_title="Chronos AI", layout="centered")
 
 # --- CONFIG ---
-# Ensure port matches main.py (8026)
-WS_URL = "ws://localhost:8026/ws/chat"
-API_URL = "http://localhost:8026"
+# Use configuration from control.py
+WS_URL = f"{control.WS_BASE_URL}/ws/chat"
+API_URL = control.API_BASE_URL
 
+# Initialize authentication state
+init_auth_state()
+
+# Check if user is authenticated
+if not is_authenticated():
+    # Show login/register page
+    render_auth_page()
+    st.stop()
+
+# Initialize session ID for authenticated users
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 
@@ -32,8 +51,12 @@ with st.sidebar:
                     # Prepare files for upload
                     files = [("files", (file.name, file.getvalue(), file.type)) for file in uploaded_files]
                     
-                    # Upload to API
-                    response = requests.post(f"{API_URL}/api/upload/batch", files=files)
+                    # Upload to API with authentication headers
+                    response = requests.post(
+                        f"{API_URL}/api/upload/batch", 
+                        files=files,
+                        headers=get_auth_headers()
+                    )
                     
                     if response.status_code == 200:
                         result = response.json()
@@ -55,10 +78,19 @@ with st.sidebar:
     
     st.divider()
     st.caption("💡 Files are automatically processed and stored in the vector database")
+    
+    # Render user menu at the bottom of sidebar
+    render_user_menu()
 
 st.title("🤖 Chronos Unified Agent")
 
-# We pass the Session ID and URL to the JavaScript
+# Build WebSocket URL with authentication token
+access_token = st.session_state.get("access_token", "")
+ws_url_with_auth = f"{WS_URL}?session_id={st.session_state.session_id}"
+if access_token:
+    ws_url_with_auth += f"&token={access_token}"
+
+# We pass the Session ID, URL, and Token to the JavaScript
 js_code = f"""
 <!DOCTYPE html>
 <html>
@@ -177,7 +209,7 @@ js_code = f"""
 
     <script>
         const SESSION_ID = "{st.session_state.session_id}";
-        const WS_URL = "{WS_URL}?session_id=" + SESSION_ID;
+        const WS_URL = "{ws_url_with_auth}";
         
         // DOM Elements
         const historyDiv = document.getElementById('history');
