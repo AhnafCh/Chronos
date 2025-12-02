@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 
 # 1. Keep the imports that we know work for your version
-from deepgram.client import DeepgramClient
+from deepgram.client import DeepgramClient, DeepgramClientOptions
 from deepgram.clients.live.v1 import LiveOptions
 from deepgram import LiveTranscriptionEvents
 
@@ -15,7 +15,12 @@ logger = logging.getLogger(__name__)
 class DeepgramASR(ASRInterface):
     def __init__(self):
         try:
-            self.client = DeepgramClient(settings.DEEPGRAM_API_KEY) # type: ignore
+            # Enable keepalive to prevent timeout after 10 seconds of silence
+            config = DeepgramClientOptions(
+                api_key=settings.DEEPGRAM_API_KEY,
+                options={"keepalive": "true"}
+            )
+            self.client = DeepgramClient(config=config) # type: ignore
         except Exception as e:
             logger.error(f"Failed to initialize Deepgram Client: {e}")
             raise

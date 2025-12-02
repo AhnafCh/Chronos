@@ -38,7 +38,7 @@ async def process_file(file: UploadFile) -> List[Document]:
     os.makedirs(temp_dir, exist_ok=True)
     
     # Save file temporarily
-    file_path = os.path.join(temp_dir, file.filename)
+    file_path = os.path.join(temp_dir, file.filename) # type: ignore
     
     try:
         # Write uploaded file to disk
@@ -47,7 +47,7 @@ async def process_file(file: UploadFile) -> List[Document]:
             f.write(content)
         
         # Determine file type and load accordingly
-        file_extension = os.path.splitext(file.filename)[1].lower()
+        file_extension = os.path.splitext(file.filename)[1].lower()    # type: ignore
         
         if file_extension == ".pdf":
             loader = PyPDFLoader(file_path)

@@ -1,4 +1,14 @@
 # src/main.py
+import os
+import warnings
+# Suppress TensorFlow warnings before any TF imports
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress all TF logs except errors
+os.environ['TF_ENABLE_DEPRECATION_WARNINGS'] = '0'
+# Suppress Python warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', module='tensorflow')
+
 import logging
 from contextlib import asynccontextmanager
 import uvicorn

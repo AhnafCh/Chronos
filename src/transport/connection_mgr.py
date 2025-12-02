@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from typing import AsyncGenerator
 from fastapi import WebSocket, WebSocketDisconnect
 from src.core.interfaces import ASRInterface, LLMInterface, TTSInterface
@@ -151,27 +152,42 @@ class ConnectionManager:
     async def text_chunker(self, chunks: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
         """
         Aggregates tokens into full sentences to optimize TTS audio quality.
+        Handles emails, URLs, abbreviations, and decimals intelligently.
         """
         buffer = ""
-        punctuation = {".", "?", "!", ":", ";"}
+        
+        # Pattern to match sentence-ending punctuation that's NOT part of:
+        # - Email addresses (word@word.word)
+        # - URLs (http://example.com or www.example.com)
+        # - Common abbreviations (Dr., Mr., Mrs., Ms., etc.)
+        # - Decimals (3.14)
+        # - File extensions (.txt, .pdf)
+        sentence_end_pattern = re.compile(
+            r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s+'
+            r'|(?<=\?)\s+'
+            r'|(?<=!)\s+'
+            r'|(?<=:)\s+(?=[A-Z])'  # Colon followed by capital letter
+            r'|(?<=;)\s+'
+        )
         
         async for text in chunks:
             buffer += text
             
-            # Check for punctuation
-            last_punc_index = -1
-            for p in punctuation:
-                idx = buffer.rfind(p)
-                if idx > last_punc_index:
-                    last_punc_index = idx
+            # Look for sentence boundaries
+            matches = list(sentence_end_pattern.finditer(buffer))
             
-            if last_punc_index != -1:
-                sentence = buffer[:last_punc_index+1]
-                buffer = buffer[last_punc_index+1:]
+            if matches:
+                # Get the position of the last match
+                last_match = matches[-1]
+                sentence_end_pos = last_match.start()
                 
-                sentence = sentence.strip()
+                # Extract the complete sentence(s)
+                sentence = buffer[:sentence_end_pos].strip()
+                buffer = buffer[sentence_end_pos:].strip()
+                
                 if sentence:
                     yield sentence
 
+        # Yield any remaining content
         if buffer.strip():
             yield buffer.strip()
