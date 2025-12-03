@@ -33,7 +33,7 @@ LLM_MODEL: str = "gpt-4o-mini"
 
 # Temperature (0.0 = deterministic, 2.0 = very creative)
 # Lower = more focused, Higher = more creative/random
-LLM_TEMPERATURE: float = 0.7
+LLM_TEMPERATURE: float = 0.2
 
 # Max Tokens to Generate
 # Controls response length. Higher = longer responses, higher cost

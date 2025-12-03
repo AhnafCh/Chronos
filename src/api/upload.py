@@ -2,7 +2,7 @@
 import os
 import logging
 from typing import List
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings
@@ -14,6 +14,8 @@ from langchain_community.document_loaders import (
     UnstructuredMarkdownLoader,
 )
 from src.core.config import settings
+from src.api.deps import get_current_active_user
+from src.db.models import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,7 +30,7 @@ def get_embeddings():
         api_key=settings.OPENAI_API_KEY # type: ignore
     )
 
-async def process_file(file: UploadFile) -> List[Document]:
+async def process_file(file: UploadFile, user_uuid: str) -> List[Document]:
     """
     Process uploaded file and extract documents
     Supports: PDF, TXT, MD, DOCX
@@ -66,10 +68,11 @@ async def process_file(file: UploadFile) -> List[Document]:
         # Load and split documents
         documents = loader.load()
         
-        # Add metadata
+        # Add metadata including user UUID
         for doc in documents:
             doc.metadata["source"] = file.filename
             doc.metadata["file_type"] = file_extension
+            doc.metadata["user_uuid"] = user_uuid
         
         return documents
     
@@ -94,14 +97,18 @@ async def ingest_to_pinecone(documents: List[Document]) -> int:
     return len(documents)
 
 @router.post("/upload", tags=["Upload"])
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Upload a file and automatically ingest it into Pinecone vector store.
     
     Supported file types: PDF, TXT, MD, DOCX
+    Requires authentication.
     """
     try:
-        logger.info(f"📤 Received file: {file.filename}")
+        logger.info(f"📤 Received file: {file.filename} from user: {current_user.id}")
         
         # Validate Pinecone configuration
         if not settings.PINECONE_API_KEY or not settings.OPENAI_API_KEY:
@@ -110,9 +117,9 @@ async def upload_file(file: UploadFile = File(...)):
                 detail="Missing PINECONE_API_KEY or OPENAI_API_KEY in configuration"
             )
         
-        # Process the file
+        # Process the file with user UUID
         logger.info(f"📄 Processing file: {file.filename}")
-        documents = await process_file(file)
+        documents = await process_file(file, str(current_user.id))
         
         if not documents:
             raise HTTPException(
@@ -149,14 +156,18 @@ async def upload_file(file: UploadFile = File(...)):
         )
 
 @router.post("/upload/batch", tags=["Upload"])
-async def upload_files_batch(files: List[UploadFile] = File(...)):
+async def upload_files_batch(
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Upload multiple files and automatically ingest them into Pinecone vector store.
     
     Supported file types: PDF, TXT, MD, DOCX
+    Requires authentication.
     """
     try:
-        logger.info(f"📤 Received {len(files)} file(s)")
+        logger.info(f"📤 Received {len(files)} file(s) from user: {current_user.id}")
         
         # Validate Pinecone configuration
         if not settings.PINECONE_API_KEY or not settings.OPENAI_API_KEY:
@@ -172,7 +183,7 @@ async def upload_files_batch(files: List[UploadFile] = File(...)):
         for file in files:
             try:
                 logger.info(f"📄 Processing file: {file.filename}")
-                documents = await process_file(file)
+                documents = await process_file(file, str(current_user.id))
                 all_documents.extend(documents)
                 
                 file_results.append({

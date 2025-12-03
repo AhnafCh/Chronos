@@ -39,7 +39,8 @@ async def websocket_endpoint(
     
     # Dependency Injection: Create fresh services for this specific user connection
     asr_service = DeepgramASR()
-    llm_service = OpenAILLM(thread_id=session_id)
+    # Pass user_id as string to LLM for user-specific document retrieval
+    llm_service = OpenAILLM(thread_id=session_id, user_uuid=str(user_id) if user_id else None)
     tts_service = OpenAITTS()
 
     manager = ConnectionManager(

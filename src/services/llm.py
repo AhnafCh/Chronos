@@ -1,24 +1,28 @@
 import uuid
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from langchain_core.messages import HumanMessage
 from src.core.interfaces import LLMInterface
-from src.brain.graph import brain_app
+from src.brain.graph import build_graph
 from src.core import control
 
 logger = logging.getLogger(__name__)
 logger.setLevel(control.VOICE_PIPELINE_LOG_LEVEL)
 
 class OpenAILLM(LLMInterface):
-    def __init__(self, thread_id: str):
+    def __init__(self, thread_id: str, user_uuid: Optional[str] = None):
         self.thread_id = thread_id
+        self.user_uuid = user_uuid
         self.config = {"configurable": {"thread_id": self.thread_id}}
 
         # --- Token Counters ---
         self.input_tokens = 0
         self.output_tokens = 0
+        
+        # Build user-specific brain graph
+        self.brain_app = build_graph(user_uuid)
 
-        logger.info(f"Brain initialized for session: {self.thread_id}")
+        logger.info(f"Brain initialized for session: {self.thread_id} (user: {user_uuid})")
 
     async def generate_response(self, query: str) -> AsyncGenerator[str, None]:
         if not query:
@@ -27,7 +31,7 @@ class OpenAILLM(LLMInterface):
         try:
             # Stream events from the Graph (LangGraph)
             # detailed events including token streaming
-            async for event in brain_app.astream_events(
+            async for event in self.brain_app.astream_events(
                 {"messages": [HumanMessage(content=query)]},
                 config=self.config, # type: ignore
                 version="v2"

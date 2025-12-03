@@ -23,8 +23,8 @@ from src.core.config import settings
 from src.core.logger import setup_logger
 from src.core import control
 
-# For dummy import to initialize the retriever at startup
-from src.brain.retriever import retriever
+# For retriever warmup at startup
+from src.brain.retriever import get_retriever
 
 # Database initialization
 from src.db.database import init_db
@@ -57,7 +57,8 @@ async def lifespan(app: FastAPI):
     if settings.PINECONE_API_KEY:
         try:
             logger.info("🔥 Warming up Vector DB (removing cold start)...")
-            await retriever.ainvoke("wake up")
+            warmup_retriever = get_retriever()
+            await warmup_retriever.ainvoke("wake up")
             logger.info("✅ Vector DB is Ready and Hot!")
         except Exception as e:
             logger.error(f"❌ Warmup failed: {e}")
